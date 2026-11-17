@@ -337,7 +337,8 @@ def render_overview(municipalities: pd.DataFrame):
       ORDER BY students_in_demo DESC""", params)
     if len(summary):
         metric = st.selectbox("Показатель", ["Учащихся", "Педагогов", "Школ"], key="overview_metric")
-        st.bar_chart(summary.set_index("Территория")[[metric]], horizontal=True, x_label=metric, y_label="Территория")
+        # При horizontal=True Streamlit отображает x_label слева, y_label снизу.
+        st.bar_chart(summary.set_index("Территория")[[metric]], horizontal=True, x_label="Территория", y_label=metric)
         with st.expander("Показать числовую таблицу"):
             st.dataframe(summary, hide_index=True, use_container_width=True)
     st.markdown("#### Школы и основные показатели")
@@ -385,7 +386,8 @@ def render_exams(municipalities: pd.DataFrame, years: pd.DataFrame):
     st.markdown("#### Средний балл по предметам")
     chart = data.copy()
     chart["Средний балл"] = pd.to_numeric(chart["Средний балл"])
-    st.bar_chart(chart.set_index("Предмет")[["Средний балл"]], horizontal=True, x_label="Средний балл", y_label="Предмет")
+    # Горизонтальные диаграммы: слева предметы, снизу числовая шкала.
+    st.bar_chart(chart.set_index("Предмет")[["Средний балл"]], horizontal=True, x_label="Предмет", y_label="Средний балл")
     st.markdown("#### Подробные результаты")
     st.dataframe(data, hide_index=True, use_container_width=True)
     st.download_button("Скачать результаты (CSV)", data.to_csv(index=False, sep=";").encode("utf-8-sig"),
