@@ -70,8 +70,8 @@ TABLES: dict[str, dict[str, Any]] = {
         "result": "Результат"}},
     "municipalities": {"title": "Муниципальные образования", "group": "Справочники", "fields": {
         "id": "ID территории", "name": "Название территории",
-        "administrative_center": "Административный центр", "population": "Население (демо)",
-        "school_age_population": "Население школьного возраста (демо)"}},
+        "administrative_center": "Административный центр", "population": "Население",
+        "school_age_population": "Население школьного возраста"}},
     "academic_years": {"title": "Учебные годы", "group": "Справочники", "fields": {
         "id": "ID учебного года", "name": "Учебный год", "start_date": "Дата начала",
         "end_date": "Дата окончания"}},
@@ -95,9 +95,9 @@ TABLES: dict[str, dict[str, Any]] = {
         "has_wifi": "Есть Wi-Fi", "rating_2025_2026": "Место в рейтинге 2025/2026"}},
     "vw_municipality_dashboard": {"title": "Сводка по территориям", "group": "Сводные таблицы", "fields": {
         "municipality_id": "ID территории", "municipality": "Территория",
-        "population": "Население (демо)", "school_age_population": "Население школьного возраста (демо)",
-        "schools_in_demo": "Количество школ (демо)", "students_in_demo": "Количество учащихся (демо)",
-        "teachers_in_demo": "Количество педагогов (демо)"}},
+        "population": "Население", "school_age_population": "Население школьного возраста",
+        "schools_in_demo": "Количество школ", "students_in_demo": "Количество учащихся",
+        "teachers_in_demo": "Количество педагогов"}},
     "vw_exam_dashboard": {"title": "Сводка по экзаменам", "group": "Сводные таблицы", "fields": {
         "academic_year": "Учебный год", "municipality": "Территория", "school": "Школа",
         "exam_type": "Тип экзамена", "subject": "Предмет",
@@ -202,6 +202,13 @@ def fetch_scalar(sql: str, params: dict[str, Any] | None = None) -> int:
 
 def pretty(df: pd.DataFrame, table: str) -> pd.DataFrame:
     result = df.rename(columns=TABLES[table]["fields"]).copy()
+    # Убираем технические пометки в текстовых значениях при отображении и экспорте.
+    for display_column in ("Адрес", "Название олимпиады"):
+        if display_column in result.columns:
+            result[display_column] = result[display_column].apply(
+                lambda value: value.replace(" (условный адрес)", "").replace(" (демо)", "")
+                if isinstance(value, str) else value
+            )
     for col in result.columns:
         # В SQL NULL сохраняются как пустые значения, boolean показываем на русском.
         if pd.api.types.is_bool_dtype(result[col]):
@@ -304,7 +311,6 @@ def frame_table(table: str, where: str, params: dict[str, Any], limit: int, offs
 
 def render_overview(municipalities: pd.DataFrame):
     st.subheader("Общая сводка")
-    st.caption("Показатели рассчитаны по демонстрационной базе, а не по официальной статистике Хабаровского края.")
     region_options = {"Все территории": None}
     region_options.update({row["name"]: int(row["id"]) for _, row in municipalities.iterrows()})
     selected_region = st.selectbox("Территория", list(region_options), key="overview_region")
@@ -346,7 +352,6 @@ def render_overview(municipalities: pd.DataFrame):
           AND r.academic_year_id = (SELECT id FROM edu_khv.academic_years WHERE name = '2025/2026')
         {school_where} ORDER BY s.students_count DESC LIMIT 15""", params)
     st.dataframe(school_rows, hide_index=True, use_container_width=True)
-    st.caption("Численность учащихся по школам относится к 2025/2026 учебному году; остальные данные также демонстрационные.")
 
 
 def render_exams(municipalities: pd.DataFrame, years: pd.DataFrame):
@@ -377,7 +382,6 @@ def render_exams(municipalities: pd.DataFrame, years: pd.DataFrame):
     if data.empty:
         st.info("По выбранным параметрам записей нет.")
         return
-    st.info("ОГЭ и ЕГЭ отображаются отдельно: у них разные шкалы оценивания. Данные вымышлены.")
     st.markdown("#### Средний балл по предметам")
     chart = data.copy()
     chart["Средний балл"] = pd.to_numeric(chart["Средний балл"])
@@ -393,7 +397,6 @@ def render_tables(municipalities: pd.DataFrame, years: pd.DataFrame):
     group = st.selectbox("Группа таблиц", GROUPS)
     visible = [(k, v["title"]) for k, v in TABLES.items() if v["group"] == group]
     choice = st.selectbox("Таблица", [v[0] for v in visible], format_func=lambda key: TABLES[key]["title"])
-    st.caption("Названия полей и связанных справочников отображаются на русском языке. Изменение записей отключено.")
 
     applicable_region = choice == "municipalities" or choice in ("vw_school_dashboard", "vw_municipality_dashboard", "vw_exam_dashboard") or school_id_expression(choice) is not None
     applicable_school = school_id_expression(choice) is not None
@@ -466,17 +469,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Образование Хабаровского края")
-st.caption("Демонстрационная система мониторинга школ и образовательных показателей")
+st.caption("Мониторинг школ и образовательных показателей")
 
 with st.sidebar:
     st.markdown("### Разделы")
     page = st.radio("Навигация", ["Обзор", "Таблицы базы данных", "Результаты экзаменов"], label_visibility="collapsed")
     st.divider()
-    st.caption("18 таблиц · 3 представления · PostgreSQL")
     if st.button("Обновить данные", use_container_width=True):
         query.clear()
         st.rerun()
-    st.caption("Данные синтетические. Не официальная статистика.")
 
 try:
     # Запросы сразу выявляют ошибки конфигурации или отсутствие схемы.
